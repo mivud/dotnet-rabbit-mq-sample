@@ -11,23 +11,35 @@ namespace EventBusRabbitMQ
 {
     public class RabbitMQEventBus : IEventBus
     {
-        private readonly IConnection _connection;
+        private readonly ConnectionFactory _factory;
         private readonly ILogger<RabbitMQEventBus> _logger;
 
+        private IConnection? _connection;
         private IChannel? _channel;
 
-        public RabbitMQEventBus(IConnection connection,
+        public RabbitMQEventBus(ConnectionFactory factory,
             ILogger<RabbitMQEventBus> logger)
         {
-            _connection = connection;
+            _factory = factory;
             _logger = logger;
+        }
+
+        private async Task<IConnection> GetConnectionAsync()
+        {
+            if (_connection == null || !_connection.IsOpen)
+            {
+                _connection = await _factory.CreateConnectionAsync();
+            }
+
+            return _connection;
         }
 
         private async Task<IChannel> GetChannelAsync()
         {
             if (_channel == null || !_channel.IsOpen)
             {
-                _channel = await _connection.CreateChannelAsync();
+                var connection = await GetConnectionAsync();
+                _channel = await connection.CreateChannelAsync();
             }
 
             return _channel;
@@ -40,7 +52,7 @@ namespace EventBusRabbitMQ
 
             await channel.QueueDeclareAsync(
                 queue: queue,
-                durable: false,
+                durable: true,
                 exclusive: false,
                 autoDelete: false,
                 arguments: null);
@@ -48,9 +60,16 @@ namespace EventBusRabbitMQ
             var json = JsonSerializer.Serialize(message);
             var body = Encoding.UTF8.GetBytes(json);
 
+            var props = new BasicProperties
+            {
+                Persistent = true
+            };
+
             await channel.BasicPublishAsync(
                 exchange: "",
                 routingKey: queue,
+                mandatory: false,
+                basicProperties: props,
                 body: body);
 
             _logger.LogInformation(
@@ -66,7 +85,7 @@ namespace EventBusRabbitMQ
 
             await channel.QueueDeclareAsync(
                 queue: queue,
-                durable: false,
+                durable: true,
                 exclusive: false,
                 autoDelete: false,
                 arguments: null);
@@ -97,10 +116,10 @@ namespace EventBusRabbitMQ
 
         public async ValueTask DisposeAsync()
         {
-            if (_channel != null && _channel.IsOpen)
+            if (_channel?.IsOpen is true)
                 await _channel.CloseAsync();
 
-            if (_connection.IsOpen)
+            if (_connection?.IsOpen is true)
                 await _connection.CloseAsync();
 
             GC.SuppressFinalize(this);
