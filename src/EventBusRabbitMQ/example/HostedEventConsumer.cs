@@ -10,15 +10,13 @@ namespace EventBusRabbitMQ.example
         {
         }
 
-        private async Task ConsumeAsync()
+        private Task ConsumeAsync()
         {
-            Consume(_queue, async data =>
+            return ConsumeAsync(_queue, async data =>
             {
                 Console.WriteLine($"----- [RabbitMQ] Message received: {data.Id}");
                 await WriteValueAsync(data);
             });
-
-            await Task.CompletedTask;
         }
 
         public static async Task WriteValueAsync(EventData data)

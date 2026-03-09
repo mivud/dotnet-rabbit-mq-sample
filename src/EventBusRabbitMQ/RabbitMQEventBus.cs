@@ -5,71 +5,103 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 
 namespace EventBusRabbitMQ
 {
     public class RabbitMQEventBus : IEventBus
     {
         private readonly IConnection _connection;
-        private readonly IModel _model;
         private readonly ILogger<RabbitMQEventBus> _logger;
+
+        private IChannel? _channel;
 
         public RabbitMQEventBus(IConnection connection,
             ILogger<RabbitMQEventBus> logger)
         {
             _connection = connection;
-            _model = _connection.CreateModel();
             _logger = logger;
         }
 
-        public void Publish<T>(string queue, T message)
+        private async Task<IChannel> GetChannelAsync()
+        {
+            if (_channel == null || !_channel.IsOpen)
+            {
+                _channel = await _connection.CreateChannelAsync();
+            }
+
+            return _channel;
+        }
+
+        public async Task PublishAsync<T>(string queue, T message)
              where T : IntegrationEvent
         {
-            //declare the queue after mentioning name and a few property related to that
-            _model.QueueDeclare(queue, exclusive: false);
+            var channel = await GetChannelAsync();
 
-            //Serialize the message
+            await channel.QueueDeclareAsync(
+                queue: queue,
+                durable: false,
+                exclusive: false,
+                autoDelete: false,
+                arguments: null);
+
             var json = JsonSerializer.Serialize(message);
             var body = Encoding.UTF8.GetBytes(json);
 
-            //put the data on to the product queue
-            _model.BasicPublish(exchange: "", routingKey: queue, body: body);
+            await channel.BasicPublishAsync(
+                exchange: "",
+                routingKey: queue,
+                body: body);
 
-            _logger.LogInformation("----- [RabbitMQ] Queue {queue}: {id} published", queue, message.Id);
+            _logger.LogInformation(
+                "----- [RabbitMQ] Queue {queue}: {id} published",
+                queue,
+                message.Id);
         }
 
-        public void Consume<T>(string queue, Action<T> handler)
+        public async Task ConsumeAsync<T>(string queue, Func<T, Task> handler)
             where T : IntegrationEvent
         {
-            //declare the queue after mentioning name and a few property related to that
-            _model.QueueDeclare(queue, exclusive: false);
+            var channel = await GetChannelAsync();
 
-            //Set Event object which listen message from chanel which is sent by producer
-            var consumer = new EventingBasicConsumer(_model);
-            consumer.Received += (model, eventArgs) =>
+            await channel.QueueDeclareAsync(
+                queue: queue,
+                durable: false,
+                exclusive: false,
+                autoDelete: false,
+                arguments: null);
+
+            var consumer = new AsyncEventingBasicConsumer(channel);
+
+            consumer.ReceivedAsync += async (sender, eventArgs) =>
             {
                 var body = eventArgs.Body.ToArray();
                 var message = Encoding.UTF8.GetString(body);
 
                 var obj = JsonSerializer.Deserialize<T>(message);
-
                 ArgumentNullException.ThrowIfNull(obj);
 
-                handler(obj);
+                await handler(obj);
 
-                _logger.LogInformation("----- [RabbitMQ] Queue {queue}: {id} consumed", queue, obj.Id);
+                _logger.LogInformation(
+                    "----- [RabbitMQ] Queue {queue}: {id} consumed",
+                    queue,
+                    obj.Id);
             };
-            //read the message
-            _model.BasicConsume(queue: queue, autoAck: true, consumer: consumer);
+
+            await channel.BasicConsumeAsync(
+                queue: queue,
+                autoAck: true,
+                consumer: consumer);
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
-            if (_model.IsOpen)
-                _model.Close();
+            if (_channel != null && _channel.IsOpen)
+                await _channel.CloseAsync();
 
             if (_connection.IsOpen)
-                _connection.Close();
+                await _connection.CloseAsync();
 
             GC.SuppressFinalize(this);
         }

@@ -16,12 +16,12 @@ namespace Producer.Controllers
         }
 
         [HttpGet]
-        public IActionResult Get()
+        public async Task<IActionResult> Get()
         {
             var data = new EventData();
             data.Message = "Message from ID:" + data.Id;
 
-            _eventProducer.Publish(MessageQueue.Queue, data);
+            await _eventProducer.PublishAsync(MessageQueue.Queue, data);
 
             return Ok();
         }

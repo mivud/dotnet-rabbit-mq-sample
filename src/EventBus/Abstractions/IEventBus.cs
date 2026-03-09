@@ -2,12 +2,12 @@
 
 namespace EventBus.Abstractions
 {
-    public interface IEventBus : IDisposable
+    public interface IEventBus : IAsyncDisposable
     {
-        void Publish<T>(string queue, T message)
+        Task PublishAsync<T>(string queue, T message)
             where T : IntegrationEvent;
 
-        void Consume<T>(string queue, Action<T> handler)
+        Task ConsumeAsync<T>(string queue, Func<T, Task> handler)
             where T : IntegrationEvent;
     }
 }

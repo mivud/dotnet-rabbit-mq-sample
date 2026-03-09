@@ -14,17 +14,16 @@ namespace EventBusRabbitMQ
             _event = @event;
         }
 
-        public void Consume(string queue, Action<T> handler)
+        public Task ConsumeAsync(string queue, Func<T, Task> handler)
         {
-            _event.Consume(queue, handler);
+            return _event.ConsumeAsync(queue, handler);
         }
 
         public abstract Task StartAsync(CancellationToken cancellationToken);
 
-        public Task StopAsync(CancellationToken cancellationToken)
+        public async Task StopAsync(CancellationToken cancellationToken)
         {
-            _event.Dispose();
-            return Task.CompletedTask;
+            await _event.DisposeAsync();
         }
     }
 }

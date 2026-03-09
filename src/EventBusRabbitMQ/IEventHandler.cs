@@ -5,6 +5,6 @@ namespace EventBusRabbitMQ
     public interface IEventHandler<T>
          where T : IntegrationEvent
     {
-        void Consume(string queue, Action<T> handler);
+        Task ConsumeAsync(string queue, Func<T, Task> handler);
     }
 }

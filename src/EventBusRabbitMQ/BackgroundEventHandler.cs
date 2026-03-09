@@ -14,9 +14,9 @@ namespace EventBusRabbitMQ
             _event = @event;
         }
 
-        public void Consume(string queue, Action<T> handler)
+        public Task ConsumeAsync(string queue, Func<T, Task> handler)
         {
-            _event.Consume(queue, handler);
+            return _event.ConsumeAsync(queue, handler);
         }
     }
 }

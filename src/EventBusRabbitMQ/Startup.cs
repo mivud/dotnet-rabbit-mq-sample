@@ -14,15 +14,28 @@ public static class Startup
         services.AddSingleton<IConnection>(sp =>
         {
             //Here we specify the Rabbit MQ Server. we use rabbitmq docker image and use it
+            var factory1 = new ConnectionFactory
+            {
+                HostName = "10.32.183.166",
+                UserName = "storeuser",
+                Password = "CHANGE_ME",
+                VirtualHost = "/",
+                Port = 5672,
+                Ssl = new SslOption
+                {
+                    Enabled = false
+                }
+            };
+
             var factory = new ConnectionFactory
             {
-                HostName = "localhost",
-                UserName = "guest",
-                Password = "guest"
+                HostName = "10.114.32.16",
+                UserName = "super",
+                Password = "adm!n"
             };
 
             //Create the RabbitMQ connection using connection factory details as i mentioned above
-            return factory.CreateConnection();
+            return factory.CreateConnectionAsync().Result;
         });
 
         services.AddSingleton<IEventBus, RabbitMQEventBus>();
